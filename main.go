@@ -7,16 +7,25 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 )
 
 const BUF_SIZE = 8 * 1024
 const FILE = "./random_11342319_byte_file"
+const FILE_MAX = 11342319 // save a stat + we want to compare hashes
 const PAUSE_TIME = 7944 * time.Microsecond
 const THINK_TIME = PAUSE_TIME * 1385
 
 // hacked up https://golang.org/src/io/io.go?s=13817:13895#L422
 var errInvalidWrite = errors.New("invalid write result")
+
+func min(x, y int64) int64 {
+	if x < y {
+		return x
+	}
+	return y
+}
 
 func copyBy(dst io.Writer, src io.Reader, size uint64, withWait bool) (written int64, err error) {
 	buf := make([]byte, size)
@@ -54,7 +63,7 @@ func copyBy(dst io.Writer, src io.Reader, size uint64, withWait bool) (written i
 }
 
 func serve(w http.ResponseWriter, r *http.Request) {
-	log.Printf("serve: %s", r.URL.Path)
+	log.Printf("serve: remote = %s, path = %s", r.RemoteAddr, r.URL.Path)
 	switch r.URL.Path {
 	case "/think", "/drip":
 		withCopyWait := r.URL.Path == "/drip"
@@ -71,11 +80,19 @@ func serve(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
+		defer f.Close()
 
 		w.WriteHeader(http.StatusOK)
-		defer f.Close()
-		log.Printf("withCopyWait: %t", withCopyWait)
-		copyBy(w, f, BUF_SIZE, withCopyWait)
+		limit, _ := strconv.ParseInt(r.URL.Query().Get("limit"), 10, 64)
+		if limit == 0 {
+			log.Printf("full serve, withCopyWait: %t", withCopyWait)
+			copyBy(w, f, BUF_SIZE, withCopyWait)
+		} else {
+			limit = min(limit, FILE_MAX)
+			log.Printf("partial serve, withCopyWait: %t, limit = %d", withCopyWait, limit)
+			lr := &io.LimitedReader{R: f, N: limit}
+			copyBy(w, lr, BUF_SIZE, withCopyWait)
+		}
 	default:
 		fmt.Fprintf(w, "moo")
 	}
