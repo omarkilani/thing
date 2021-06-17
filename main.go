@@ -92,6 +92,7 @@ func serve(w http.ResponseWriter, r *http.Request) {
 			time.Sleep(time.Duration(thinkTime))
 		}
 
+		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
 		w.Header().Set("Expires", "Thu, 19 Nov 1981 08:52:00 GMT")
 		w.Header().Set("Cache-Control", "private, max-age=0, no-store, no-cache, must-revalidate")
