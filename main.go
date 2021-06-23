@@ -15,6 +15,8 @@ const BUF_SIZE = (8 * 1024) + 1 // misalign buffer size
 const FILE = "./random_52428800_byte_file"
 const FILE_DEFAULT = 11342319 // this cauess 3 minutes of stall
 const FILE_MAX = 52428800
+const UNCMP_FILE = "./uncompressed_92204301_byte_file"
+const UNCMP_MAX = 92204301
 const PAUSE_TIME = 7944 * time.Microsecond
 const THINK_TIME = PAUSE_TIME * 1385
 
@@ -77,9 +79,40 @@ func copyBy(dst io.Writer, src io.Reader, size uint64, withWait bool) (written i
 	return written, err
 }
 
+func hdrs(w http.ResponseWriter) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+	w.Header().Set("Expires", "Thu, 19 Nov 1981 08:52:00 GMT")
+	w.Header().Set("Cache-Control", "private, max-age=0, no-store, no-cache, must-revalidate")
+}
+
 func serve(w http.ResponseWriter, r *http.Request) {
 	log.Printf("serve: remote = %s, path = %s", r.RemoteAddr, r.URL.Path)
 	switch r.URL.Path {
+	case "/uncmp":
+		log.Println("serving uncompressed file")
+		time.Sleep(THINK_TIME)
+		hdrs(w)
+		f, err := os.Open(UNCMP_FILE)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		defer f.Close()
+
+		w.WriteHeader(http.StatusOK)
+
+		limit, _ := strconv.ParseUint(r.URL.Query().Get("limit"), 10, 64)
+		if limit == 0 {
+			limit = UNCMP_MAX
+		} else {
+			limit = min(limit, UNCMP_MAX)
+		}
+
+		log.Printf("uncmp: limit = %d", limit)
+		lr := &io.LimitedReader{R: f, N: int64(limit)}
+		copyBy(w, lr, BUF_SIZE, false)
+		log.Println("uncmp done")
 	case "/think", "/drip":
 		withCopyWait := r.URL.Path == "/drip"
 		if r.URL.Path == "/think" {
@@ -92,10 +125,7 @@ func serve(w http.ResponseWriter, r *http.Request) {
 			time.Sleep(time.Duration(thinkTime))
 		}
 
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
-		w.Header().Set("Expires", "Thu, 19 Nov 1981 08:52:00 GMT")
-		w.Header().Set("Cache-Control", "private, max-age=0, no-store, no-cache, must-revalidate")
+		hdrs(w)
 
 		f, err := os.Open(FILE)
 		if err != nil {
@@ -116,6 +146,7 @@ func serve(w http.ResponseWriter, r *http.Request) {
 		log.Printf("serve: withCopyWait: %t, limit = %d", withCopyWait, limit)
 		lr := &io.LimitedReader{R: f, N: int64(limit)}
 		copyBy(w, lr, BUF_SIZE, withCopyWait)
+		log.Println("serve done")
 	default:
 		fmt.Fprintf(w, "moo")
 	}
