@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"github.com/NYTimes/gziphandler"
 	"io"
 	"log"
 	"net/http"
@@ -95,7 +96,7 @@ func serve(w http.ResponseWriter, r *http.Request) {
 		r.Header.Get("content-length"),
 		r.Header.Get("cf-ray"))
 	switch r.URL.Path {
-	case "/uncmp":
+	case "/uncmp", "/gzip":
 		log.Println("serving uncompressed file")
 		time.Sleep(THINK_TIME)
 		hdrs(w)
@@ -160,7 +161,9 @@ func serve(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	log.Println("listen: :80")
-	http.HandleFunc("/", serve)
+	hndlr := http.HandlerFunc(serve)
+	http.Handle("/", hndlr)
+	http.Handle("/gzip", gziphandler.GzipHandler(hndlr))
 	err := http.ListenAndServe(":80", nil)
 	if err != nil {
 		log.Fatal(err)
