@@ -87,7 +87,13 @@ func hdrs(w http.ResponseWriter) {
 }
 
 func serve(w http.ResponseWriter, r *http.Request) {
-	log.Printf("serve: remote = %s, path = %s", r.RemoteAddr, r.URL.Path)
+	log.Printf("%s: serve: ip = %s, remote = %s, path = %s, cl = %s, ray = %s",
+		r.Method,
+		r.Header.Get("cf-connecting-ip"),
+		r.RemoteAddr,
+		r.URL.Path,
+		r.Header.Get("content-length"),
+		r.Header.Get("cf-ray"))
 	switch r.URL.Path {
 	case "/uncmp":
 		log.Println("serving uncompressed file")
@@ -111,8 +117,8 @@ func serve(w http.ResponseWriter, r *http.Request) {
 
 		log.Printf("uncmp: limit = %d", limit)
 		lr := &io.LimitedReader{R: f, N: int64(limit)}
-		copyBy(w, lr, BUF_SIZE, false)
-		log.Println("uncmp done")
+		wr, _ := copyBy(w, lr, BUF_SIZE, false)
+		log.Printf("uncmp done: written = %d", wr)
 	case "/think", "/drip":
 		withCopyWait := r.URL.Path == "/drip"
 		if r.URL.Path == "/think" {
